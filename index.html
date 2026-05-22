@@ -6,11 +6,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="確率計算機">
-<meta name="theme-color" content="#f5a623">
-<link rel="manifest" href="manifest.json">
-<!-- Apple用アイコン -->
-<link rel="apple-touch-icon" href="icon-192.png">
 <title>パチンコ確率計算機 v2</title>
 <!-- Chart.js: CDN優先、オフライン時はスタブで代替 -->
 <script>
@@ -652,6 +647,50 @@
     margin-bottom: 4px;
   }
   @media (max-width: 420px) { .scroll-hint { display: block; } }
+  /* ===== バックアップ／復元 ===== */
+  .backup-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .btn-backup {
+    background: var(--bg3);
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 1px;
+    padding: 8px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .btn-backup:hover { background: rgba(74,158,255,0.1); }
+  .btn-restore {
+    background: var(--bg3);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 1px;
+    padding: 8px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .btn-restore:hover { background: rgba(46,204,113,0.1); }
+  .backup-msg {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .backup-msg.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -674,6 +713,13 @@
       <button class="btn btn-purple" onclick="toggleRegForm()">＋ 新規登録</button>
       <button class="btn btn-accent" onclick="editMachine()" id="editBtn" style="display:none">✏ 編集</button>
       <button class="btn btn-red" onclick="deleteMachine()" id="deleteBtn" style="display:none">🗑 削除</button>
+    </div>
+    <!-- バックアップ／復元 -->
+    <div class="backup-row">
+      <button class="btn btn-backup" onclick="exportBackup()">📤 バックアップ書き出し</button>
+      <label class="btn btn-restore" for="restoreFile">📥 バックアップから復元</label>
+      <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="importBackup(event)">
+      <span id="backup-msg" class="backup-msg"></span>
     </div>
 
     <!-- 機種登録フォーム -->
@@ -966,6 +1012,71 @@ function getMachines() {
 }
 function saveMachines(arr) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+// ============================================================
+// バックアップ／復元
+// ============================================================
+function exportBackup() {
+  const machines = getMachines();
+  if (machines.length === 0) {
+    showBackupMsg('⚠ 登録された機種がありません', true);
+    return;
+  }
+  const data = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    machines: machines
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  a.href = url;
+  a.download = `pachinko_backup_${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showBackupMsg(`✓ ${machines.length}件をエクスポートしました`);
+}
+
+function importBackup(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      // バージョン1（配列直接）にも対応
+      const machines = Array.isArray(data) ? data : data.machines;
+      if (!Array.isArray(machines) || machines.length === 0) {
+        showBackupMsg('⚠ 有効なデータがありません', true);
+        return;
+      }
+      const existing = getMachines();
+      // 同名は上書き、新規は追加
+      machines.forEach(m => {
+        const idx = existing.findIndex(e => e.name === m.name);
+        if (idx >= 0) existing[idx] = m;
+        else existing.push(m);
+      });
+      saveMachines(existing);
+      refreshSelect();
+      showBackupMsg(`✓ ${machines.length}件を復元しました`);
+    } catch {
+      showBackupMsg('⚠ ファイルの読み込みに失敗しました', true);
+    }
+    // 同じファイルを再度選択できるようリセット
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function showBackupMsg(msg, isError = false) {
+  const el = document.getElementById('backup-msg');
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--red)' : 'var(--green)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
 }
 
 function refreshSelect() {
@@ -1878,16 +1989,6 @@ function waitForChartAndInit() {
   }
 }
 waitForChartAndInit();
-// ============================================================
-// SERVICE WORKER 登録（PWA・オフライン対応）
-// ============================================================
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('SW registered:', reg.scope))
-      .catch(err => console.log('SW registration failed:', err));
-  });
-}
 </script>
 </body>
 </html>
