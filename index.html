@@ -1,0 +1,1893 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="確率計算機">
+<meta name="theme-color" content="#f5a623">
+<link rel="manifest" href="manifest.json">
+<!-- Apple用アイコン -->
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>パチンコ確率計算機 v2</title>
+<!-- Chart.js: CDN優先、オフライン時はスタブで代替 -->
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+  s.onload  = function(){ window._chartReady = true; };
+  s.onerror = function(){
+    // オフライン時：Chartをスタブ化してグラフ以外は動作させる
+    window.Chart = function(ctx, cfg){ this._ctx=ctx; this._cfg=cfg; };
+    window.Chart.prototype.destroy = function(){};
+    window._chartReady = true;
+    var note = document.getElementById('offline-note');
+    if(note) note.style.display='block';
+  };
+  document.head.appendChild(s);
+})();
+</script>
+<!-- Google Fonts: CDN優先、オフライン時はシステムフォントで代替 -->
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" onerror="this.remove()">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --card: #16161f;
+    --border: #2a2a3a;
+    --accent: #f5a623;
+    --accent2: #e05a2b;
+    --blue: #4a9eff;
+    --green: #2ecc71;
+    --red: #e74c3c;
+    --purple: #9b59b6;
+    --text: #e8e8f0;
+    --text2: #8888aa;
+    --text3: #555570;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+    --sans: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+    --display: 'Bebas Neue', 'Impact', 'Arial Black', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+  header {
+    background: linear-gradient(135deg, #0a0a0f 0%, #1a1020 100%);
+    border-bottom: 1px solid var(--accent);
+    padding: 14px 16px 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::after {
+    content: '◈ v2 ◈';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 2px;
+  }
+  @media (min-width: 600px) {
+    header { padding: 20px 24px 16px; }
+    header::after { content: '◈ PROBABILITY ENGINE v2 ◈'; right: 24px; font-size: 11px; letter-spacing: 3px; }
+  }
+  header h1 {
+    font-family: var(--display);
+    font-size: 26px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(245,166,35,0.4);
+  }
+  @media (min-width: 600px) { header h1 { font-size: 32px; letter-spacing: 4px; } }
+  header p {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    margin-top: 2px;
+    font-family: var(--mono);
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 16px 12px; }
+  @media (min-width: 600px) { .container { padding: 24px 16px; } }
+
+  /* ---- MACHINE MANAGER ---- */
+  .machine-panel {
+    background: var(--card);
+    border: 1px solid var(--purple);
+    border-top: 2px solid var(--purple);
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .machine-panel h2 {
+    font-family: var(--display);
+    letter-spacing: 3px;
+    font-size: 16px;
+    color: var(--purple);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .machine-panel h2::before { content: '◈'; font-size: 12px; }
+
+  .machine-select-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .machine-select-row select {
+    flex: 1;
+    min-width: 140px;
+    background: var(--bg);
+    border: 1px solid var(--purple);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 12px;
+    outline: none;
+    cursor: pointer;
+  }
+  .btn {
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 2px;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+    touch-action: manipulation;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:active { transform: scale(0.97); }
+  .btn-purple { background: var(--purple); color: #fff; }
+  .btn-accent { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #000; }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-green { background: var(--green); color: #000; }
+
+  /* 機種登録フォーム */
+  .reg-form {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 18px 20px;
+    margin-top: 12px;
+    display: none;
+  }
+  .reg-form.open { display: block; }
+  .reg-form h3 {
+    font-family: var(--display);
+    letter-spacing: 2px;
+    font-size: 14px;
+    color: var(--purple);
+    margin-bottom: 14px;
+  }
+  .reg-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  @media (min-width: 600px) {
+    .reg-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  }
+
+  /* 出玉分布登録 */
+  .dist-section { margin-top: 14px; }
+  .dist-section label {
+    font-size: 11px;
+    color: var(--text2);
+    letter-spacing: 1px;
+    font-family: var(--mono);
+    margin-bottom: 8px;
+    display: block;
+  }
+  .dist-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .dist-row input {
+    width: 90px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 6px 10px;
+    outline: none;
+  }
+  .dist-row input:focus { border-color: var(--purple); }
+  .dist-row span {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text3);
+    white-space: nowrap;
+  }
+  .dist-row .rm-btn {
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 2px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .dist-total-warn {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .add-dist-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 5px 14px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  .add-dist-btn:hover { border-color: var(--purple); color: var(--purple); }
+
+  .reg-actions { display: flex; gap: 10px; margin-top: 14px; }
+
+  /* ---- INPUT PANEL ---- */
+  .input-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .input-panel h2 {
+    font-family: var(--display);
+    letter-spacing: 3px;
+    font-size: 16px;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .input-panel h2::before { content: '▶'; font-size: 10px; }
+  .input-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media (min-width: 600px) {
+    .input-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+  }
+  .input-group label {
+    display: block;
+    font-size: 11px;
+    color: var(--text2);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-family: var(--mono);
+  }
+  .input-group input, .input-group select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .input-group input:focus { border-color: var(--accent); }
+  .input-group .unit {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 4px;
+    font-family: var(--mono);
+  }
+  .calc-btn {
+    margin-top: 16px;
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border: none;
+    border-radius: 3px;
+    color: #000;
+    font-family: var(--display);
+    font-size: 20px;
+    letter-spacing: 4px;
+    padding: 16px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    touch-action: manipulation;
+  }
+  .calc-btn:hover { opacity: 0.9; }
+  .calc-btn:active { transform: scale(0.99); }
+
+  /* ---- SECTION ---- */
+  .section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .section-header {
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-header h3 {
+    font-family: var(--display);
+    letter-spacing: 3px;
+    font-size: 15px;
+    color: var(--text);
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--accent);
+    color: #000;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+  }
+  .badge.blue { background: var(--blue); }
+  .badge.green { background: var(--green); }
+  .badge.purple { background: var(--purple); color: #fff; }
+  .section-body { padding: 20px; }
+
+  /* ---- STAT CARDS ---- */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  @media (min-width: 600px) {
+    .stat-row { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  }
+  .stat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .stat-card.blue::before { background: var(--blue); }
+  .stat-card.green::before { background: var(--green); }
+  .stat-card.red::before { background: var(--red); }
+  .stat-card.purple::before { background: var(--purple); }
+  .stat-card .label {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    font-family: var(--mono);
+    margin-bottom: 4px;
+  }
+  .stat-card .value {
+    font-family: var(--display);
+    font-size: 26px;
+    letter-spacing: 2px;
+    color: var(--text);
+    line-height: 1;
+  }
+  .stat-card .value.accent { color: var(--accent); }
+  .stat-card .value.blue { color: var(--blue); }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .value.purple { color: var(--purple); }
+  .stat-card .sub { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+
+  /* ---- QUIT TIME CARD ---- */
+  .quit-time-card {
+    background: var(--bg2);
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-top: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .quit-time-card::before {
+    content: '辞め時';
+    position: absolute;
+    top: 12px;
+    left: 20px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    opacity: 0.6;
+  }
+  .quit-time-card .qt-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 16px;
+    margin-top: 8px;
+  }
+  @media (max-width: 400px) {
+    .quit-time-card .qt-grid { grid-template-columns: 1fr; gap: 12px; }
+  }
+  .quit-time-card .qt-item {
+    display: flex;
+    flex-direction: column;
+  }
+  .quit-time-card .qt-label {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    font-family: var(--mono);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .quit-time-card .qt-value {
+    font-family: var(--display);
+    font-size: 20px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    line-height: 1.2;
+  }
+  .quit-time-card .qt-sub {
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 3px;
+    font-family: var(--mono);
+  }
+
+  /* ---- TABLES ---- */
+  .table-wrap { overflow-x: auto; margin-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; min-width: 500px; }
+  thead th {
+    background: var(--bg3);
+    color: var(--text2);
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th:first-child { text-align: left; }
+  tbody tr { border-bottom: 1px solid rgba(42,42,58,0.5); transition: background 0.1s; }
+  tbody tr:hover { background: rgba(245,166,35,0.04); }
+  tbody tr.highlight { background: rgba(245,166,35,0.08); }
+  tbody td { padding: 7px 12px; text-align: right; color: var(--text2); }
+  tbody td:first-child { text-align: left; color: var(--text); }
+  .pct-bar { display: inline-block; height: 3px; background: var(--accent); border-radius: 2px; margin-left: 6px; vertical-align: middle; opacity: 0.6; }
+  .pct-bar.blue { background: var(--blue); }
+
+  /* ---- CHART ---- */
+  .chart-wrap { position: relative; height: 220px; margin-top: 16px; }
+  @media (min-width: 600px) { .chart-wrap { height: 280px; } }
+
+  /* ---- QUIT / EV CARDS ---- */
+  .quit-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 600px) { .quit-grid { grid-template-columns: 1fr 1fr; gap: 16px; } }
+  .quit-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px;
+  }
+  .quit-card h4 {
+    font-family: var(--display);
+    letter-spacing: 2px;
+    font-size: 14px;
+    color: var(--text2);
+    margin-bottom: 12px;
+  }
+  .quit-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(42,42,58,0.5);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .quit-item:last-child { border-bottom: none; }
+  .quit-item .k { color: var(--text2); }
+  .quit-item .v { color: var(--accent); font-size: 14px; font-weight: 600; }
+  .quit-item .v.ok { color: var(--green); }
+  .quit-item .v.ng { color: var(--red); }
+
+  .alert-box {
+    border: 1px solid;
+    border-radius: 3px;
+    padding: 12px 16px;
+    font-size: 13px;
+    margin-top: 16px;
+    font-family: var(--mono);
+    line-height: 1.8;
+  }
+  .alert-box.warn { border-color: var(--accent); background: rgba(245,166,35,0.06); color: var(--accent); }
+  .alert-box.ok   { border-color: var(--green);  background: rgba(46,204,113,0.06);  color: var(--green); }
+  .alert-box.ng   { border-color: var(--red);    background: rgba(231,76,60,0.06);   color: var(--red); }
+
+  /* ---- RESULT SUMMARY (top) ---- */
+  #result-summary {
+    display: none;
+    background: var(--card);
+    border: 2px solid var(--green);
+    border-radius: 4px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: border-color 0.4s, background 0.4s;
+  }
+  #result-summary .rs-header {
+    background: rgba(46,204,113,0.1);
+    border-bottom: 1px solid rgba(46,204,113,0.3);
+    padding: 10px 16px;
+    font-family: var(--display);
+    letter-spacing: 3px;
+    font-size: 14px;
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.4s, color 0.4s;
+  }
+  @keyframes rainbowBorder {
+    0%   { border-color: #ff0080; }
+    16%  { border-color: #ff8800; }
+    33%  { border-color: #ffff00; }
+    50%  { border-color: #00ff88; }
+    66%  { border-color: #0088ff; }
+    83%  { border-color: #8800ff; }
+    100% { border-color: #ff0080; }
+  }
+  #result-summary.rainbow-mode {
+    animation: rainbowBorder 2s linear infinite;
+    background: linear-gradient(135deg,rgba(255,0,128,0.06),rgba(255,136,0,0.06),rgba(0,255,136,0.06),rgba(0,136,255,0.06)) !important;
+  }
+  #result-summary .rs-body { padding: 16px 20px; }
+
+  .adv-bar-wrap { margin-top: 6px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .adv-bar { height: 100%; border-radius: 2px; transition: width 0.4s; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .hidden { display: none; }
+  @media (max-width: 600px) { #adv-grid { grid-template-columns: 1fr !important; } }
+
+  /* ===== 統合クイックサマリー専用スタイル ===== */
+  /* rs-stats は stat-row のグリッドを使わず独立したレイアウト */
+  #rs-stats { display: block !important; }
+
+  /* 上段: 5枚カード（横スクロール対応） */
+  .rs-top-cards {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+  @media (max-width: 700px) {
+    .rs-top-cards {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .rs-top-cards .stat-card:nth-child(4),
+    .rs-top-cards .stat-card:nth-child(5) {
+      grid-column: span 1;
+    }
+  }
+  @media (max-width: 420px) {
+    .rs-top-cards {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      gap: 8px;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    .rs-top-cards::-webkit-scrollbar { display: none; }
+    .rs-top-cards .stat-card {
+      flex: 0 0 calc(45vw);
+      scroll-snap-align: start;
+    }
+  }
+
+  /* 下段: 辞め時4項目カード */
+  .rs-quit-card {
+    margin-top: 0 !important;
+  }
+  .rs-quit-card .qt-value.rs-red { color: var(--red) !important; }
+  .rs-quit-card .qt-value.rs-green { color: var(--green) !important; }
+  .rs-quit-card .qt-value.rs-prob-val { color: var(--blue) !important; }
+
+  /* スクロールヒント（スマホ用） */
+  .scroll-hint {
+    display: none;
+    font-size: 10px;
+    color: var(--text3);
+    font-family: var(--mono);
+    text-align: right;
+    margin-bottom: 4px;
+  }
+  @media (max-width: 420px) { .scroll-hint { display: block; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>パチンコ確率計算機</h1>
+  <p>PROBABILITY CALCULATOR — PACHINKO ANALYSIS ENGINE v2</p>
+  <div id="offline-note" style="display:none;margin-top:6px;font-size:11px;color:#e74c3c;font-family:var(--mono)">⚠ オフラインモード：グラフは非表示（計算は全て動作します）</div>
+</header>
+
+<div class="container">
+
+  <!-- ===== 機種管理パネル ===== -->
+  <div class="machine-panel">
+    <h2>機種プリセット管理</h2>
+    <div class="machine-select-row">
+      <select id="machineSelect" onchange="loadMachine()">
+        <option value="">── 機種を選択して読み込む ──</option>
+      </select>
+      <button class="btn btn-purple" onclick="toggleRegForm()">＋ 新規登録</button>
+      <button class="btn btn-accent" onclick="editMachine()" id="editBtn" style="display:none">✏ 編集</button>
+      <button class="btn btn-red" onclick="deleteMachine()" id="deleteBtn" style="display:none">🗑 削除</button>
+    </div>
+
+    <!-- 機種登録フォーム -->
+    <div class="reg-form" id="regForm">
+      <h3 id="regFormTitle">▶ 機種情報を入力して登録</h3>
+      <div class="reg-grid">
+        <div class="input-group">
+          <label>機種名</label>
+          <input type="text" id="regName" placeholder="例：海物語MAX3" style="font-size:15px">
+          <div class="unit">任意の名前</div>
+        </div>
+        <div class="input-group">
+          <label>確率分母</label>
+          <input type="number" id="regDenom" value="319" min="1" step="1">
+          <div class="unit">1/N の N</div>
+        </div>
+        <div class="input-group">
+          <label>確変突入率（%）</label>
+          <input type="number" id="regKakuhenRate" value="65" min="0" max="100" step="1">
+          <div class="unit">初当たり後の確変率</div>
+        </div>
+        <div class="input-group">
+          <label>確変継続率（%）</label>
+          <input type="number" id="regKakuhenKeep" value="80" min="0" max="100" step="1">
+          <div class="unit">確変中に次も確変</div>
+        </div>
+        <div class="input-group">
+          <label>ST回数（G）</label>
+          <input type="number" id="regStG" value="100" min="0" step="10">
+          <div class="unit">確変終了後の時短G数</div>
+        </div>
+        <div class="input-group">
+          <label>確変時期待出玉（個）/回</label>
+          <input type="number" id="regKakuhenBalls" value="1500" min="0" step="100">
+          <div class="unit">確変大当たり1回の出玉</div>
+        </div>
+        <div class="input-group">
+          <label>確変時トータル期待出玉（個）</label>
+          <input type="number" id="regKakuhenTotal" value="" min="0" step="100" placeholder="空欄=自動計算">
+          <div class="unit">確変込みの全体出玉（任意）</div>
+        </div>
+        <div class="input-group">
+          <label>初当たり出玉 α（個）</label>
+          <input type="number" id="regAlpha" value="1200" min="0" step="100">
+          <div class="unit">初当たり1回の出玉</div>
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btn btn-purple" onclick="predictKakuhenTotal()" style="font-size:12px;padding:7px 14px">🔮 確変時トータル期待出玉を予測計算</button>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-left:10px">空欄のときのみ反映：α + 確変時期待出玉/回 × (1/（1-継続率))</span>
+      </div>
+
+      <!-- 確変中出玉分布 -->
+      <div class="dist-section">
+        <label>◈ 確変中の出玉分布（何%が何玉か自由に登録）</label>
+        <div id="distRows"></div>
+        <div class="dist-total-warn" id="distTotalWarn"></div>
+        <button class="add-dist-btn" onclick="addDistRow()">＋ 出玉パターンを追加</button>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:6px">
+          ※ 合計が100%でない場合は「確変時平均期待出玉」を直接使用します
+        </div>
+      </div>
+
+      <div class="reg-actions">
+        <button class="btn btn-purple" onclick="saveMachine()" id="saveBtn">💾 登録・保存</button>
+        <button class="btn" style="background:var(--bg3);color:var(--text2)" onclick="cancelRegForm()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== セッションパラメータ ===== -->
+  <div class="input-panel">
+    <h2>セッションパラメータ</h2>
+    <div class="input-grid">
+      <div class="input-group">
+        <label>確率分母</label>
+        <input type="number" id="denom" value="319" min="1" step="1">
+        <div class="unit">1/N の N（例：319）</div>
+      </div>
+      <div class="input-group">
+        <label>現在のゲーム数 (G)</label>
+        <input type="number" id="currentG" value="500" min="0" step="1">
+        <div class="unit">現在の回転数</div>
+      </div>
+      <div class="input-group">
+        <label>1Kあたりの回転数</label>
+        <input type="number" id="rPer1K" value="14.5" min="1" step="0.5">
+        <div class="unit">回転/1K</div>
+      </div>
+      <div class="input-group">
+        <label>初当たり出玉 α（個）</label>
+        <input type="number" id="alpha" value="1200" min="1" step="100">
+        <div class="unit">初当たり1回の出玉</div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <h2 style="margin-bottom:16px">確変・連チャンパラメータ（γ）</h2>
+      <div class="input-grid">
+        <div class="input-group">
+          <label>確変時期待出玉（個）/回</label>
+          <input type="number" id="kakuhenBalls" value="1500" min="0" step="100">
+          <div class="unit">確変大当たり1回の期待出玉</div>
+        </div>
+        <div class="input-group">
+          <label>確変時トータル期待出玉（個）</label>
+          <input type="number" id="kakuhenTotal" value="" min="0" step="100" placeholder="空欄=自動計算">
+          <div class="unit">確変込み全体出玉（任意入力）</div>
+        </div>
+        <div class="input-group">
+          <label>確変突入率（%）</label>
+          <input type="number" id="kakuhenRate" value="65" min="0" max="100" step="1">
+          <div class="unit">初当たり後の確変率</div>
+        </div>
+        <div class="input-group">
+          <label>玉単価（円）</label>
+          <input type="number" id="ballPrice" value="4" min="1" step="0.5">
+          <div class="unit">1玉あたりの換金単価</div>
+        </div>
+        <div class="input-group">
+          <label>確変継続率（%）</label>
+          <input type="number" id="kakuhenKeep" value="80" min="0" max="100" step="1">
+          <div class="unit">確変中に次も確変に入る率</div>
+        </div>
+        <div class="input-group">
+          <label>ST回数（G）</label>
+          <input type="number" id="stG" value="100" min="0" step="10">
+          <div class="unit">確変終了後の時短G数</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-purple" onclick="predictKakuhenTotalSession()" style="font-size:12px;padding:7px 14px">🔮 確変時トータル期待出玉を予測計算</button>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">空欄のときのみ反映：α + 確変時期待出玉/回 × 1/(1-継続率)</span>
+      </div>
+      <div style="margin-top:12px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--text3)">
+        ◈ γ（トータル期待出玉） = 確変時トータル期待出玉（入力値 or 自動計算）<br>
+        ◈ 辞め時判定（γ込みEV）：確変時トータル期待出玉 × 玉単価 × 確変突入率 &lt; 投資した金額
+      </div>
+    </div>
+
+    <button class="calc-btn" onclick="calculate()">◈ 計算する ◈</button>
+  </div>
+
+  <!-- ===== 結果サマリー（上部表示） ===== -->
+  <div id="result-summary">
+    <div class="rs-header">⚡ 自身の当選確率 &amp; 辞め時分析 — クイックサマリー</div>
+    <div class="rs-body">
+      <div class="scroll-hint">← スワイプしてカードを確認 →</div>
+      <div id="rs-stats"></div>
+      <div id="rs-alert"></div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 1 ===== -->
+  <div class="section" id="sec1">
+    <div class="section-header">
+      <h3>① 現在ゲーム数までの当選確率</h3>
+      <span class="badge">CUMULATIVE</span>
+    </div>
+    <div class="section-body">
+      <div class="stat-row" id="stats1"></div>
+      <div class="table-wrap">
+        <table id="table1">
+          <thead>
+            <tr>
+              <th>ゲーム数</th>
+              <th>累積当選確率</th>
+              <th>未当選確率</th>
+              <th>1K当たりの費用</th>
+            </tr>
+          </thead>
+          <tbody id="tbody1"></tbody>
+        </table>
+      </div>
+      <div class="chart-wrap"><canvas id="chart1"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 1' ===== -->
+  <div class="section" id="sec1p">
+    <div class="section-header">
+      <h3>①' 0Gスタート — 1K別当選確率</h3>
+      <span class="badge blue">1K STEPS</span>
+    </div>
+    <div class="section-body">
+      <div class="stat-row" id="stats1p"></div>
+      <div class="table-wrap">
+        <table id="table1p">
+          <thead>
+            <tr>
+              <th>1K数</th>
+              <th>ゲーム数</th>
+              <th>累積当選確率</th>
+              <th>その1Kで当たる確率</th>
+              <th>未当選確率</th>
+            </tr>
+          </thead>
+          <tbody id="tbody1p"></tbody>
+        </table>
+      </div>
+      <div class="chart-wrap"><canvas id="chart1p"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 2 ===== -->
+  <div class="section" id="sec2">
+    <div class="section-header">
+      <h3>② 現在Gから先 — 1K別当選確率（100K分）</h3>
+      <span class="badge">FROM CURRENT G</span>
+    </div>
+    <div class="section-body">
+      <div class="stat-row" id="stats2"></div>
+      <div class="table-wrap">
+        <table id="table2">
+          <thead>
+            <tr>
+              <th>+1K</th>
+              <th>ゲーム数</th>
+              <th>累積当選確率（全体）</th>
+              <th>現在Gからの累積確率</th>
+              <th>その1Kで当たる確率</th>
+            </tr>
+          </thead>
+          <tbody id="tbody2"></tbody>
+        </table>
+      </div>
+      <div class="chart-wrap"><canvas id="chart2"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 5 ===== -->
+  <div class="section" id="sec5">
+    <div class="section-header">
+      <h3>⑤ 0Gスタートとの比較 — あなたの実質優位性</h3>
+      <span class="badge purple">ADVANTAGE</span>
+    </div>
+    <div class="section-body">
+      <div class="stat-row" id="stats5"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" id="adv-grid">
+        <div class="quit-card">
+          <h4>節約額・資金優位性</h4>
+          <div id="adv-money"></div>
+        </div>
+        <div class="quit-card">
+          <h4>0Gスタートとの確率比較</h4>
+          <div id="adv-prob"></div>
+        </div>
+      </div>
+      <div id="adv-alert"></div>
+      <div class="chart-wrap"><canvas id="chart5"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 3&4 ===== -->
+  <div class="section" id="sec34">
+    <div class="section-header">
+      <h3>③④ 自身の当選確率 &amp; 辞め時詳細分析</h3>
+      <span class="badge green">QUIT TIMING</span>
+    </div>
+    <div class="section-body">
+      <div class="stat-row" id="stats34"></div>
+      <div class="quit-grid">
+        <div class="quit-card">
+          <h4>確率崩壊ライン（50%到達）</h4>
+          <div id="quit-table"></div>
+        </div>
+        <div class="quit-card">
+          <h4>期待値ベース辞め時</h4>
+          <div id="ev-table"></div>
+        </div>
+      </div>
+      <div id="quit-alert"></div>
+      <div class="chart-wrap"><canvas id="chart3"></canvas></div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ============================================================
+// STORAGE KEY
+// ============================================================
+const STORAGE_KEY = 'pachinko_machines_v2';
+
+// ============================================================
+// MACHINE MANAGER
+// ============================================================
+function getMachines() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
+}
+function saveMachines(arr) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+function refreshSelect() {
+  const sel = document.getElementById('machineSelect');
+  const machines = getMachines();
+  sel.innerHTML = '<option value="">── 機種を選択して読み込む ──</option>';
+  machines.forEach((m, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = m.name;
+    sel.appendChild(opt);
+  });
+  const hasSelection = sel.value !== '';
+  document.getElementById('deleteBtn').style.display = hasSelection ? 'inline-flex' : 'none';
+  document.getElementById('editBtn').style.display = hasSelection ? 'inline-flex' : 'none';
+}
+
+let editingMachineIdx = null; // null=新規, number=編集中インデックス
+
+function toggleRegForm() {
+  editingMachineIdx = null;
+  const f = document.getElementById('regForm');
+  const isOpen = f.classList.contains('open');
+  if(!isOpen) {
+    // 新規登録モードでフォームをリセット
+    document.getElementById('regFormTitle').textContent = '▶ 機種情報を入力して登録';
+    document.getElementById('saveBtn').textContent = '💾 登録・保存';
+    document.getElementById('regName').value = '';
+    document.getElementById('regDenom').value = '319';
+    document.getElementById('regKakuhenRate').value = '65';
+    document.getElementById('regKakuhenKeep').value = '80';
+    document.getElementById('regStG').value = '100';
+    document.getElementById('regKakuhenBalls').value = '1500';
+    document.getElementById('regKakuhenTotal').value = '';
+    document.getElementById('regAlpha').value = '1200';
+    document.getElementById('distRows').innerHTML = '';
+    addDistRow(50, 1500);
+    addDistRow(50, 500);
+  }
+  f.classList.toggle('open');
+}
+
+function cancelRegForm() {
+  editingMachineIdx = null;
+  document.getElementById('regForm').classList.remove('open');
+}
+
+function editMachine() {
+  const sel = document.getElementById('machineSelect');
+  const idx = parseInt(sel.value);
+  if(isNaN(idx)) return;
+  const machines = getMachines();
+  const machine = machines[idx];
+  if(!machine) return;
+
+  editingMachineIdx = idx;
+  document.getElementById('regFormTitle').textContent = `✏ 「${machine.name}」を編集`;
+  document.getElementById('saveBtn').textContent = '💾 上書き保存';
+
+  document.getElementById('regName').value = machine.name;
+  document.getElementById('regDenom').value = machine.denom;
+  document.getElementById('regKakuhenRate').value = machine.kakuhenRate;
+  document.getElementById('regKakuhenKeep').value = machine.kakuhenKeep;
+  document.getElementById('regStG').value = machine.stG;
+  document.getElementById('regKakuhenBalls').value = machine.kakuhenBalls;
+  document.getElementById('regKakuhenTotal').value = machine.kakuhenTotal || '';
+  document.getElementById('regAlpha').value = machine.alpha || 1200;
+
+  // 分布行
+  document.getElementById('distRows').innerHTML = '';
+  if(machine.dist && machine.dist.length > 0) {
+    machine.dist.forEach(d => addDistRow(d.pct, d.balls));
+  } else {
+    addDistRow(50, 1500);
+    addDistRow(50, 500);
+  }
+
+  document.getElementById('regForm').classList.add('open');
+  document.getElementById('regForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function addDistRow(pct = '', balls = '') {
+  const container = document.getElementById('distRows');
+  const row = document.createElement('div');
+  row.className = 'dist-row';
+  row.innerHTML = `
+    <input type="number" placeholder="%" min="0" max="100" value="${pct}" class="dist-pct" oninput="updateDistTotal()">
+    <span>%の確率で</span>
+    <input type="number" placeholder="玉数" min="0" value="${balls}" class="dist-balls">
+    <span>玉</span>
+    <button class="rm-btn" onclick="this.parentElement.remove();updateDistTotal()">✕</button>
+  `;
+  container.appendChild(row);
+  updateDistTotal();
+}
+
+function updateDistTotal() {
+  const pcts = [...document.querySelectorAll('.dist-pct')].map(i => parseFloat(i.value)||0);
+  const total = pcts.reduce((a,b)=>a+b,0);
+  const warn = document.getElementById('distTotalWarn');
+  if(Math.abs(total - 100) < 0.01) {
+    warn.style.color = 'var(--green)';
+    warn.textContent = `✓ 合計 ${total.toFixed(1)}% — OK`;
+  } else {
+    warn.style.color = total > 100 ? 'var(--red)' : 'var(--accent)';
+    warn.textContent = `合計 ${total.toFixed(1)}%（100%になるよう調整してください）`;
+  }
+}
+
+function getDistRows() {
+  const rows = document.querySelectorAll('.dist-row');
+  const result = [];
+  rows.forEach(row => {
+    const pct = parseFloat(row.querySelector('.dist-pct').value) || 0;
+    const balls = parseFloat(row.querySelector('.dist-balls').value) || 0;
+    if(pct > 0) result.push({ pct, balls });
+  });
+  return result;
+}
+
+function calcAvgBallsFromDist(dist) {
+  // 分布から期待出玉を計算
+  const total = dist.reduce((a,d) => a + d.pct, 0);
+  if(Math.abs(total - 100) > 0.5 || dist.length === 0) return null;
+  return dist.reduce((a,d) => a + (d.pct/100)*d.balls, 0);
+}
+
+function predictKakuhenTotal() {
+  // 登録フォーム用の予測計算
+  const totalEl = document.getElementById('regKakuhenTotal');
+  if(totalEl.value !== '') return; // 入力済みのときは何もしない
+  const alpha = parseFloat(document.getElementById('regAlpha').value) || 1200;
+  const kakuhenBalls = parseFloat(document.getElementById('regKakuhenBalls').value) || 1500;
+  const kakuhenKeep = (parseFloat(document.getElementById('regKakuhenKeep').value) || 80) / 100;
+  const predicted = kakuhenKeep < 1
+    ? alpha + kakuhenBalls * (1 / (1 - kakuhenKeep))
+    : alpha + kakuhenBalls * 20;
+  totalEl.value = Math.round(predicted);
+}
+
+function predictKakuhenTotalSession() {
+  // セッションパラメータ用の予測計算
+  const totalEl = document.getElementById('kakuhenTotal');
+  if(totalEl.value !== '') return; // 入力済みのときは何もしない
+  const alpha = parseFloat(document.getElementById('alpha').value) || 1200;
+  const kakuhenBalls = parseFloat(document.getElementById('kakuhenBalls').value) || 1500;
+  const kakuhenKeep = (parseFloat(document.getElementById('kakuhenKeep').value) || 80) / 100;
+  const predicted = kakuhenKeep < 1
+    ? alpha + kakuhenBalls * (1 / (1 - kakuhenKeep))
+    : alpha + kakuhenBalls * 20;
+  totalEl.value = Math.round(predicted);
+}
+
+function saveMachine() {
+  const name = document.getElementById('regName').value.trim();
+  if(!name) { alert('機種名を入力してください'); return; }
+  const dist = getDistRows();
+  const avgFromDist = calcAvgBallsFromDist(dist);
+  const kakuhenKeep = parseFloat(document.getElementById('regKakuhenKeep').value) || 80;
+  const kakuhenBalls = parseFloat(document.getElementById('regKakuhenBalls').value) || 1500;
+  const alpha = parseFloat(document.getElementById('regAlpha').value) || 1200;
+  const kakuhenTotalRaw = document.getElementById('regKakuhenTotal').value;
+  const kakuhenTotal = kakuhenTotalRaw !== '' ? parseFloat(kakuhenTotalRaw) : null;
+
+  const machine = {
+    name,
+    denom: parseFloat(document.getElementById('regDenom').value) || 319,
+    kakuhenRate: parseFloat(document.getElementById('regKakuhenRate').value) || 65,
+    kakuhenKeep,
+    stG: parseFloat(document.getElementById('regStG').value) || 100,
+    kakuhenBalls,
+    alpha,
+    kakuhenTotal,
+    dist: dist,
+    avgBallsFromDist: avgFromDist,
+  };
+  const machines = getMachines();
+
+  if(editingMachineIdx !== null) {
+    // 編集モード：インデックスで上書き
+    machines[editingMachineIdx] = machine;
+    saveMachines(machines);
+    refreshSelect();
+    // 保存後にそのインデックスを選択状態にする
+    document.getElementById('machineSelect').value = editingMachineIdx;
+    document.getElementById('deleteBtn').style.display = 'inline-flex';
+    document.getElementById('editBtn').style.display = 'inline-flex';
+    document.getElementById('regForm').classList.remove('open');
+    editingMachineIdx = null;
+    alert(`「${name}」を上書き保存しました`);
+  } else {
+    // 新規登録モード：同名なら上書き
+    const idx = machines.findIndex(m => m.name === name);
+    if(idx >= 0) { machines[idx] = machine; } else { machines.push(machine); }
+    saveMachines(machines);
+    refreshSelect();
+    document.getElementById('regForm').classList.remove('open');
+    alert(`「${name}」を登録しました`);
+  }
+}
+
+function loadMachine() {
+  const sel = document.getElementById('machineSelect');
+  const idx = parseInt(sel.value);
+  const hasSelection = sel.value !== '';
+  document.getElementById('deleteBtn').style.display = hasSelection ? 'inline-flex' : 'none';
+  document.getElementById('editBtn').style.display = hasSelection ? 'inline-flex' : 'none';
+  if(isNaN(idx)) return;
+  const machine = getMachines()[idx];
+  if(!machine) return;
+
+  document.getElementById('denom').value = machine.denom;
+  document.getElementById('kakuhenRate').value = machine.kakuhenRate;
+  document.getElementById('kakuhenKeep').value = machine.kakuhenKeep;
+  document.getElementById('stG').value = machine.stG;
+  // avgBallsFromDistがあればそちらを優先
+  const balls = machine.avgBallsFromDist !== null && machine.avgBallsFromDist !== undefined
+    ? Math.round(machine.avgBallsFromDist)
+    : machine.kakuhenBalls;
+  document.getElementById('kakuhenBalls').value = balls;
+  // 確変時トータル期待出玉
+  document.getElementById('kakuhenTotal').value = machine.kakuhenTotal != null ? machine.kakuhenTotal : '';
+  // 初当たり出玉
+  if(machine.alpha) document.getElementById('alpha').value = machine.alpha;
+}
+
+function deleteMachine() {
+  const sel = document.getElementById('machineSelect');
+  const idx = parseInt(sel.value);
+  if(isNaN(idx)) return;
+  const machines = getMachines();
+  const name = machines[idx].name;
+  if(!confirm(`「${name}」を削除しますか？`)) return;
+  machines.splice(idx, 1);
+  saveMachines(machines);
+  refreshSelect();
+}
+
+// ============================================================
+// MATH HELPERS
+// ============================================================
+function cumProb(n, p) { return 1 - Math.pow(1 - 1/p, n); }
+function fmt(v, digits=2) { return (v*100).toFixed(digits); }
+function fmtN(v) { return Math.round(v).toLocaleString(); }
+
+let charts = {};
+function destroyChart(id) {
+  if(charts[id]) { try { charts[id].destroy(); } catch(e){} delete charts[id]; }
+}
+function safeNewChart(canvasId, config) {
+  if(typeof Chart === 'undefined' || !window._chartReady) return null;
+  try {
+    const ctx = document.getElementById(canvasId);
+    if(!ctx) return null;
+    return new Chart(ctx.getContext('2d'), config);
+  } catch(e) { return null; }
+}
+
+// ============================================================
+// CALCULATE
+// ============================================================
+function calculate() {
+  const denom        = parseFloat(document.getElementById('denom').value)        || 319;
+  const currG        = parseFloat(document.getElementById('currentG').value)     || 0;
+  const rPer1K       = parseFloat(document.getElementById('rPer1K').value)       || 14.5;
+  const alpha        = parseFloat(document.getElementById('alpha').value)        || 1200;
+  const kakuhenBalls = parseFloat(document.getElementById('kakuhenBalls').value) || 1500; // 確変時期待出玉/回
+  const kakuhenRate  = parseFloat(document.getElementById('kakuhenRate').value)  / 100 || 0.65;
+  const ballPrice    = parseFloat(document.getElementById('ballPrice').value)    || 4;
+  const kakuhenKeep  = parseFloat(document.getElementById('kakuhenKeep').value)  / 100 || 0.80;
+  const stG          = parseFloat(document.getElementById('stG').value)          || 100;
+
+  // 平均連チャン数
+  const avgChain = kakuhenKeep < 1 ? kakuhenRate / (1 - kakuhenKeep) : kakuhenRate * 20;
+
+  // 確変時トータル期待出玉：入力があればそれを使用、なければ自動計算
+  const kakuhenTotalRaw = document.getElementById('kakuhenTotal').value;
+  let kakuhenTotal;
+  if(kakuhenTotalRaw !== '' && !isNaN(parseFloat(kakuhenTotalRaw))) {
+    kakuhenTotal = parseFloat(kakuhenTotalRaw);
+  } else {
+    // α + 確変時期待出玉/回 × 平均連チャン数（=確率の流れに合わせた式）
+    kakuhenTotal = alpha + avgChain * kakuhenBalls;
+  }
+
+  // γ = 確変時トータル期待出玉を使用
+  const gamma = kakuhenTotal;
+
+  buildResultSummary(denom, currG, rPer1K, alpha, gamma, ballPrice, avgChain, kakuhenRate, kakuhenKeep, kakuhenBalls, kakuhenTotal);
+  buildSection1(denom, currG, rPer1K);
+  buildSection1p(denom, rPer1K);
+  buildSection2(denom, currG, rPer1K);
+  buildSection5(denom, currG, rPer1K, alpha, gamma, ballPrice);
+  buildSection34(denom, currG, rPer1K, alpha, gamma, ballPrice, avgChain, kakuhenRate, kakuhenKeep, kakuhenBalls, kakuhenTotal);
+
+  // 結果サマリーを表示
+  document.getElementById('result-summary').style.display = 'block';
+  // スクロールしてサマリーを見せる
+  document.getElementById('result-summary').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ============================================================
+// RESULT SUMMARY (上部クイック表示)
+// ============================================================
+function buildResultSummary(denom, currG, rPer1K, alpha, gamma, ballPrice, avgChain, kakuhenRate, kakuhenKeep, kakuhenBalls, kakuhenTotal) {
+  const prevP   = cumProb(currG, denom);
+  const rPer1KN = rPer1K;
+
+  // 1K当選確率
+  const myP1K = 1 - Math.pow(1 - 1/denom, rPer1KN);
+
+  // ②γ込みEV辞め時：確変時トータル期待出玉 × 玉単価 × 確変突入率 < 投資した金額
+  // 投資した金額 = k * 1000円 → k[K]
+  // 辞め時：kakuhenTotal × ballPrice × kakuhenRate < k * 1000
+  // → k > kakuhenTotal × ballPrice × kakuhenRate / 1000
+  const evBreakYen = kakuhenTotal * ballPrice * kakuhenRate; // 円
+  // 投資K数で超えた瞬間が辞め時
+  // 投資 = currInvested + k*1000 → ここでは「あと何K追加投資したら辞め時か」
+  // しかし本ロジックは「今の投資額」を基準に→ 「何K投資時点で」とする
+  // k[K] = 1,2,...100 として cumInvested=k*1000
+  let evBreakKgamma = null;
+  for(let k=1; k<=200; k++) {
+    const invested = k * 1000; // 円
+    if(evBreakYen < invested) {
+      evBreakKgamma = k;
+      break;
+    }
+  }
+
+  // 確率50%ライン
+  let quitK50 = null;
+  for(let k=1; k<=500; k++) {
+    const g = currG + k * rPer1KN;
+    const total = cumProb(g, denom);
+    const cond = (1-prevP)>0 ? (total-prevP)/(1-prevP) : 1;
+    if(cond >= 0.5 && quitK50 === null) { quitK50 = k; }
+  }
+
+  // 50%ラインでのトータル当選確率
+  const totalProb50 = cumProb(currG + quitK50 * rPer1KN, denom);
+  // EV辞め時のトータル当選確率
+  const gAtEvBreak = evBreakKgamma ? currG + evBreakKgamma * rPer1KN : null;
+  const totalProbAtEvBreak = gAtEvBreak ? cumProb(gAtEvBreak, denom) : null;
+
+  const breakKlabel = evBreakKgamma
+    ? `${evBreakKgamma}K投資時点`
+    : '200K超でも黒字';
+
+  // 当選確率（現在Gまでの累積）による色分け
+  const winProb = prevP;
+
+  // サマリーボックスのスタイルを動的に更新
+  const summaryEl = document.getElementById('result-summary');
+  summaryEl.classList.remove('rainbow-mode');
+  summaryEl.style.animation = '';
+
+  if(winProb >= 0.95) {
+    summaryEl.classList.add('rainbow-mode');
+    summaryEl.style.borderColor = '';
+    summaryEl.style.background = '';
+    const rsHeader = summaryEl.querySelector('.rs-header');
+    rsHeader.style.background = 'rgba(255,100,255,0.15)';
+    rsHeader.style.borderBottomColor = 'rgba(255,100,255,0.4)';
+    rsHeader.style.color = '#ff88ff';
+  } else {
+    let summaryBgColor, summaryBorderColor, summaryHeaderBg;
+    if(winProb >= 0.90) {
+      summaryBgColor = 'rgba(255,215,0,0.08)';
+      summaryBorderColor = '#ffd700';
+      summaryHeaderBg = 'rgba(255,215,0,0.15)';
+    } else if(winProb >= 0.80) {
+      summaryBgColor = 'rgba(231,76,60,0.08)';
+      summaryBorderColor = '#e74c3c';
+      summaryHeaderBg = 'rgba(231,76,60,0.15)';
+    } else if(winProb >= 0.70) {
+      summaryBgColor = 'rgba(155,89,182,0.08)';
+      summaryBorderColor = '#9b59b6';
+      summaryHeaderBg = 'rgba(155,89,182,0.15)';
+    } else if(winProb >= 0.60) {
+      summaryBgColor = 'rgba(46,204,113,0.08)';
+      summaryBorderColor = '#2ecc71';
+      summaryHeaderBg = 'rgba(46,204,113,0.15)';
+    } else if(winProb >= 0.50) {
+      summaryBgColor = 'rgba(74,158,255,0.08)';
+      summaryBorderColor = '#4a9eff';
+      summaryHeaderBg = 'rgba(74,158,255,0.15)';
+    } else {
+      summaryBgColor = 'rgba(136,136,170,0.04)';
+      summaryBorderColor = '#555570';
+      summaryHeaderBg = 'rgba(136,136,170,0.08)';
+    }
+    summaryEl.style.background = summaryBgColor;
+    summaryEl.style.borderColor = summaryBorderColor;
+    summaryEl.style.borderWidth = '2px';
+    const rsHeader = summaryEl.querySelector('.rs-header');
+    rsHeader.style.background = summaryHeaderBg;
+    rsHeader.style.borderBottomColor = summaryBorderColor + '55';
+    rsHeader.style.color = summaryBorderColor;
+  }
+
+  const quitThresholdOK = evBreakKgamma === null;
+
+  // ===== 統合クイックサマリー: 画像2（5 stat cards上段）+ 画像1（4項目辞め時下段）=====
+  document.getElementById('rs-stats').innerHTML = `
+    <!-- 上段: 辞め時 4項目（画像1スタイル） -->
+    <div class="quit-time-card rs-quit-card">
+      <div class="qt-grid">
+        <div class="qt-item">
+          <div class="qt-label">50%ラインの値</div>
+          <div class="qt-value">${quitK50}K後</div>
+          <div class="qt-sub">${fmtN(Math.round(currG+quitK50*rPer1KN))}G地点</div>
+        </div>
+        <div class="qt-item">
+          <div class="qt-label">50%ラインのトータル当選率</div>
+          <div class="qt-value rs-prob-val">${(totalProb50*100).toFixed(1)}%</div>
+          <div class="qt-sub">ここまでの合計</div>
+        </div>
+        <div class="qt-item">
+          <div class="qt-label">γ込みEV辞め時</div>
+          <div class="qt-value ${evBreakKgamma?'rs-red':'rs-green'}">${breakKlabel}</div>
+          <div class="qt-sub">トータルEV=${fmtN(Math.round(evBreakYen))}円</div>
+        </div>
+        <div class="qt-item">
+          <div class="qt-label">EV辞め時のトータル当選率</div>
+          <div class="qt-value rs-prob-val">${totalProbAtEvBreak ? (totalProbAtEvBreak*100).toFixed(1)+'%' : '−'}</div>
+          <div class="qt-sub">ここまでの合計</div>
+        </div>
+      </div>
+    </div>
+    <!-- 下段: 5枚 stat card（画像2スタイル） -->
+    <div class="rs-top-cards" style="margin-top:12px;margin-bottom:0">
+      <div class="stat-card ${prevP>=0.5?'red':'blue'}">
+        <div class="label">既経過累積確率</div>
+        <div class="value ${prevP>=0.5?'red':'blue'}">${fmt(prevP)}%</div>
+        <div class="sub">${prevP>=0.5?'⚠ 50%超過':'正常範囲'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">1K当選確率</div>
+        <div class="value accent">${(myP1K*100).toFixed(3)}%</div>
+        <div class="sub">${rPer1K}回転/1K</div>
+      </div>
+      <div class="stat-card green">
+        <div class="label">確率50%ライン</div>
+        <div class="value green">${quitK50}K後</div>
+        <div class="sub">${fmtN(Math.round(currG+quitK50*rPer1KN))}G地点</div>
+      </div>
+      <div class="stat-card ${evBreakKgamma?'red':'green'}">
+        <div class="label">γ込みEV辞め時</div>
+        <div class="value ${evBreakKgamma?'red':'green'}" style="font-size:16px">${breakKlabel}</div>
+        <div class="sub">γ=${fmtN(Math.round(gamma))}個 / EV=${fmtN(Math.round(evBreakYen))}円</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">平均連チャン数</div>
+        <div class="value accent">${avgChain.toFixed(2)}回</div>
+        <div class="sub">γ=${fmtN(Math.round(gamma))}個</div>
+      </div>
+    </div>
+  `;
+
+  // Alert
+  let alertHtml = '';
+  const quitG = fmtN(Math.round(currG + (quitK50||1)*rPer1KN));
+  const quitMsg = `γ込みEV辞め時: <strong>${breakKlabel}</strong>（確変トータル${fmtN(Math.round(kakuhenTotal))}個×${ballPrice}円×${(kakuhenRate*100).toFixed(0)}%=${fmtN(Math.round(evBreakYen))}円）<br>確率50%ライン: ${quitK50}K後 (${quitG}G)`;
+
+  if(prevP >= 0.63) {
+    alertHtml = `<div class="alert-box ng">⚠ 確率崩壊ゾーン：累積 ${fmt(prevP)}% 消化済み。<br>${quitMsg}</div>`;
+  } else if(prevP >= 0.5) {
+    alertHtml = `<div class="alert-box warn">▲ 50%超過：累積 ${fmt(prevP)}% 消化済み。<br>${quitMsg}</div>`;
+  } else {
+    alertHtml = `<div class="alert-box ok">✓ 正常範囲：累積 ${fmt(prevP)}% 消化。<br>${quitMsg}</div>`;
+  }
+  document.getElementById('rs-alert').innerHTML = alertHtml;
+}
+
+// ============================================================
+// SECTION 1
+// ============================================================
+function buildSection1(denom, currG, rPer1K) {
+  const step = 50;
+  const maxG = Math.max(Math.ceil((currG + 200) / step) * step, 500);
+  const cp = cumProb(currG, denom);
+  document.getElementById('stats1').innerHTML = `
+    <div class="stat-card"><div class="label">現在G数</div><div class="value accent">${fmtN(currG)}G</div></div>
+    <div class="stat-card"><div class="label">累積当選確率</div><div class="value ${cp>=0.5?'accent':'blue'}">${fmt(cp)}%</div></div>
+    <div class="stat-card"><div class="label">未当選確率</div><div class="value">${fmt(1-cp)}%</div></div>
+    <div class="stat-card blue"><div class="label">1Kあたり回転数</div><div class="value blue">${rPer1K}回</div></div>
+  `;
+  const rows=[], labels=[], data=[];
+  const tbody = document.getElementById('tbody1');
+  tbody.innerHTML = '';
+  for(let g=step; g<=maxG; g+=step) {
+    const p = cumProb(g, denom);
+    const kCost = g / rPer1K;
+    const isNow = (g >= currG && g < currG + step) || (currG === 0 && g === step);
+    labels.push(g + 'G');
+    data.push(parseFloat(fmt(p)));
+    rows.push({ g, p, kCost, isNow });
+  }
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    if(r.isNow) tr.classList.add('highlight');
+    const barW = Math.round(r.p * 80);
+    tr.innerHTML = `<td>${r.isNow?'▶ ':''}${fmtN(r.g)}G</td><td>${fmt(r.p)}%<span class="pct-bar" style="width:${barW}px"></span></td><td>${fmt(1-r.p)}%</td><td>${r.kCost.toFixed(1)}K</td>`;
+    tbody.appendChild(tr);
+  });
+  destroyChart('c1');
+  charts['c1'] = safeNewChart('chart1', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'累積当選確率(%)', data, borderColor:'#f5a623', backgroundColor:'rgba(245,166,35,0.08)', borderWidth:2, pointRadius:0, fill:true, tension:0.3 },
+        { label:'50%ライン', data:labels.map(()=>50), borderColor:'rgba(231,76,60,0.5)', borderWidth:1, borderDash:[6,4], pointRadius:0, fill:false }
+      ]
+    },
+    options: chartOpts('累積当選確率 (%)', 100)
+  });
+}
+
+// ============================================================
+// SECTION 1'
+// ============================================================
+function buildSection1p(denom, rPer1K) {
+  const maxK = 50;
+  const labels=[], cumData=[], singleData=[];
+  const tbody = document.getElementById('tbody1p');
+  tbody.innerHTML = '';
+  let prevP = 0;
+  for(let k=1; k<=maxK; k++) {
+    const g = k * rPer1K;
+    const p = cumProb(g, denom);
+    const single = p - prevP;
+    labels.push(k+'K');
+    cumData.push(parseFloat(fmt(p)));
+    singleData.push(parseFloat(fmt(single)));
+    const tr = document.createElement('tr');
+    const barW = Math.round(p * 60);
+    tr.innerHTML = `<td>${k}K</td><td>${fmtN(Math.round(g))}G</td><td>${fmt(p)}%<span class="pct-bar blue" style="width:${barW}px"></span></td><td>${fmt(single)}%</td><td>${fmt(1-p)}%</td>`;
+    tbody.appendChild(tr);
+    prevP = p;
+  }
+  const p10 = cumProb(10*rPer1K, denom);
+  const p30 = cumProb(30*rPer1K, denom);
+  document.getElementById('stats1p').innerHTML = `
+    <div class="stat-card blue"><div class="label">10K時点の累積確率</div><div class="value blue">${fmt(p10)}%</div></div>
+    <div class="stat-card blue"><div class="label">30K時点の累積確率</div><div class="value blue">${fmt(p30)}%</div></div>
+    <div class="stat-card"><div class="label">50%到達K数</div><div class="value">${half1K(denom,rPer1K)}K</div></div>
+  `;
+  destroyChart('c1p');
+  charts['c1p'] = safeNewChart('chart1p', {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'累積当選確率(%)', data:cumData, backgroundColor:'rgba(74,158,255,0.15)', borderColor:'#4a9eff', borderWidth:1, type:'line', fill:true, tension:0.3, pointRadius:0, yAxisID:'y' },
+        { label:'その1Kで当たる確率(%)', data:singleData, backgroundColor:'rgba(245,166,35,0.6)', borderColor:'#f5a623', borderWidth:0, yAxisID:'y' }
+      ]
+    },
+    options: chartOpts('確率 (%)', 100)
+  });
+}
+function half1K(denom, rPer1K) {
+  for(let k=1;k<=200;k++) { if(cumProb(k*rPer1K,denom)>=0.5) return k; }
+  return '200K+';
+}
+
+// ============================================================
+// SECTION 2
+// ============================================================
+function buildSection2(denom, currG, rPer1K) {
+  const maxK = 100;
+  const labels=[], cumFromData=[], totalCumData=[], singleData=[];
+  const prevP = cumProb(currG, denom);
+  const tbody = document.getElementById('tbody2');
+  tbody.innerHTML = '';
+  for(let k=1;k<=maxK;k++) {
+    const g = currG + k * rPer1K;
+    const gPrev = currG + (k-1)*rPer1K;
+    const totalP = cumProb(g, denom);
+    const totalPprev = cumProb(gPrev, denom);
+    const condP = (1-prevP)>0 ? (totalP-prevP)/(1-prevP) : 1;
+    const condPprev = (1-prevP)>0 ? (totalPprev-prevP)/(1-prevP) : 0;
+    const marginal = condP - condPprev;
+    labels.push('+'+k+'K');
+    cumFromData.push(parseFloat((condP*100).toFixed(2)));
+    totalCumData.push(parseFloat((totalP*100).toFixed(2)));
+    singleData.push(parseFloat((marginal*100).toFixed(2)));
+    if(k<=20) {
+      const tr = document.createElement('tr');
+      const barW = Math.round(condP*60);
+      tr.innerHTML = `<td>+${k}K</td><td>${fmtN(Math.round(g))}G</td><td>${(totalP*100).toFixed(2)}%</td><td>${(condP*100).toFixed(2)}%<span class="pct-bar" style="width:${barW}px"></span></td><td>${(marginal*100).toFixed(2)}%</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+  const total10K = totalCumData[9], total50K = totalCumData[49];
+  document.getElementById('stats2').innerHTML = `
+    <div class="stat-card"><div class="label">現在Gからの累積確率（10K後）</div><div class="value accent">${total10K}%</div></div>
+    <div class="stat-card"><div class="label">現在Gからの累積確率（50K後）</div><div class="value accent">${total50K}%</div></div>
+    <div class="stat-card blue"><div class="label">現在Gまでの累積確率</div><div class="value blue">${fmt(prevP)}%</div></div>
+  `;
+  destroyChart('c2');
+  charts['c2'] = safeNewChart('chart2', {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        { label:'現在Gからの累積確率(%)', data:cumFromData, borderColor:'#f5a623', backgroundColor:'rgba(245,166,35,0.08)', borderWidth:2.5, pointRadius:0, fill:true, tension:0.3 },
+        { label:'全体累積確率(%)', data:totalCumData, borderColor:'rgba(74,158,255,0.5)', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, borderDash:[4,3] }
+      ]
+    },
+    options: chartOpts('確率 (%)', 100)
+  });
+}
+
+// ============================================================
+// SECTION 5
+// ============================================================
+function buildSection5(denom, currG, rPer1K, alpha, gamma, ballPrice) {
+  if(currG<=0) {
+    document.getElementById('stats5').innerHTML = `<div class="stat-card"><div class="label">備考</div><div class="value" style="font-size:14px;color:var(--text2)">現在G=0のため比較なし</div></div>`;
+    document.getElementById('adv-money').innerHTML='';
+    document.getElementById('adv-prob').innerHTML='<div style="color:var(--text3);font-size:12px;font-family:var(--mono);padding:8px 0">0Gスタートと同じ条件です</div>';
+    document.getElementById('adv-alert').innerHTML='';
+    return;
+  }
+  const savedK = currG / rPer1K;
+  const savedYen = savedK * 1000;
+  const expectedKto1hit = denom / rPer1K;
+  const expectedYenTo1hit = expectedKto1hit * 1000;
+  const remainExpectedK = denom / rPer1K;
+  const remainExpectedYen = remainExpectedK * 1000;
+  const zeroStartTotalExpectedYen = savedYen + remainExpectedYen;
+  const myTotalExpectedYen = remainExpectedYen;
+  const advantageYen = savedYen;
+
+  document.getElementById('stats5').innerHTML = `
+    <div class="stat-card purple"><div class="label">節約できたK数</div><div class="value purple">${savedK.toFixed(1)}K</div><div class="sub">${fmtN(Math.round(currG))}G ÷ ${rPer1K}回転</div></div>
+    <div class="stat-card purple"><div class="label">節約額（資金優位）</div><div class="value purple">${fmtN(Math.round(savedYen))}円</div><div class="sub">0Gスタートより得</div></div>
+    <div class="stat-card"><div class="label">残り期待コスト（共通）</div><div class="value">${fmtN(Math.round(remainExpectedYen))}円</div><div class="sub">独立試行のため同じ</div></div>
+    <div class="stat-card green"><div class="label">トータル期待コスト差</div><div class="value green">▼${fmtN(Math.round(advantageYen))}円</div><div class="sub">あなたの方が安く当たれる見込み</div></div>
+  `;
+
+  let moneyHtml = '';
+  const items = [
+    { label:'節約K数', val:savedK.toFixed(1)+'K', bar:Math.min(savedK/expectedKto1hit,1), color:'#9b59b6' },
+    { label:'節約額', val:fmtN(Math.round(savedYen))+'円', bar:Math.min(savedYen/expectedYenTo1hit,1), color:'#9b59b6' },
+    { label:'0Gスタートの期待コスト', val:fmtN(Math.round(zeroStartTotalExpectedYen))+'円', bar:1, color:'#e74c3c' },
+    { label:'あなたの期待コスト', val:fmtN(Math.round(myTotalExpectedYen))+'円', bar:myTotalExpectedYen/zeroStartTotalExpectedYen, color:'#2ecc71' },
+    { label:'期待コスト削減率', val:((1-myTotalExpectedYen/zeroStartTotalExpectedYen)*100).toFixed(1)+'%', bar:1-myTotalExpectedYen/zeroStartTotalExpectedYen, color:'#f5a623' },
+  ];
+  items.forEach(item => {
+    moneyHtml += `<div class="quit-item" style="flex-direction:column;align-items:stretch;gap:2px">
+      <div style="display:flex;justify-content:space-between"><span class="k">${item.label}</span><span class="v" style="color:${item.color}">${item.val}</span></div>
+      <div class="adv-bar-wrap"><div class="adv-bar" style="width:${(item.bar*100).toFixed(1)}%;background:${item.color}"></div></div>
+    </div>`;
+  });
+  document.getElementById('adv-money').innerHTML = moneyHtml;
+
+  const prevPCurr = cumProb(currG, denom);
+  let probHtml = `<div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:8px;letter-spacing:1px">※ 次のN K後の当選確率（左:0Gスタート / 右:あなた）</div>`;
+  [1,5,10,20,30,50].forEach(k => {
+    const gK = k * rPer1K;
+    const p0 = cumProb(gK, denom);
+    const gCurrK = currG + k * rPer1K;
+    const pTotalCurrK = cumProb(gCurrK, denom);
+    const pCondCurrK = (1-prevPCurr)>0 ? (pTotalCurrK-prevPCurr)/(1-prevPCurr) : 1;
+    probHtml += `<div class="quit-item"><span class="k">${k}K後</span><span style="font-family:var(--mono);font-size:11px;color:var(--text3)">${(p0*100).toFixed(2)}% vs <span style="color:var(--accent)">${(pCondCurrK*100).toFixed(2)}%</span></span></div>`;
+  });
+  document.getElementById('adv-prob').innerHTML = probHtml;
+
+  const savePct = ((1-myTotalExpectedYen/zeroStartTotalExpectedYen)*100).toFixed(1);
+  const gammaYen = gamma * ballPrice / 1000;
+  document.getElementById('adv-alert').innerHTML = `
+    <div class="alert-box" style="border-color:#9b59b6;background:rgba(155,89,182,0.06);color:#c39bd3">
+      ◈ 資金優位まとめ（γ = ${fmtN(Math.round(gamma))}個 / ${gammaYen.toFixed(2)}K相当）<br>
+      あなたは0Gスタートの人より <strong style="color:#9b59b6">${fmtN(Math.round(savedYen))}円（${savePct}%）</strong> 安いコストで同じ当選チャンスを持っています。<br>
+      ただし <strong style="color:#f5a623">確率そのものは変わりません</strong>（独立試行）。有利なのは資金効率の話です。
+    </div>
+  `;
+
+  destroyChart('c5');
+  const maxK=60, labels5=[], data0=[], dataCurr=[];
+  for(let k=0;k<=maxK;k++) {
+    labels5.push(k+'K');
+    data0.push(parseFloat((cumProb(k*rPer1K,denom)*100).toFixed(2)));
+    if(k===0) { dataCurr.push(0); } else {
+      const gK = currG+k*rPer1K;
+      const p = cumProb(gK,denom);
+      const cond = (1-prevPCurr)>0?(p-prevPCurr)/(1-prevPCurr):1;
+      dataCurr.push(parseFloat((cond*100).toFixed(2)));
+    }
+  }
+  charts['c5'] = safeNewChart('chart5', {
+    type:'line',
+    data:{
+      labels:labels5,
+      datasets:[
+        { label:'0Gスタートの人', data:data0, borderColor:'#e74c3c', backgroundColor:'rgba(231,76,60,0.06)', borderWidth:2, pointRadius:0, fill:true, tension:0.3, borderDash:[5,3] },
+        { label:'あなた（現在Gから先）', data:dataCurr, borderColor:'#9b59b6', backgroundColor:'rgba(155,89,182,0.08)', borderWidth:2.5, pointRadius:0, fill:true, tension:0.3 },
+        { label:'50%ライン', data:labels5.map(()=>50), borderColor:'rgba(245,166,35,0.4)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false }
+      ]
+    },
+    options:{...chartOpts('累積確率(%)',100), plugins:{...chartOpts('累積確率(%)',100).plugins, tooltip:{mode:'index',intersect:false}}}
+  });
+}
+
+// ============================================================
+// SECTION 3 & 4
+// ============================================================
+function buildSection34(denom, currG, rPer1K, alpha, gamma, ballPrice, avgChain, kakuhenRate, kakuhenKeep, kakuhenBalls, kakuhenTotal) {
+  const prevP   = cumProb(currG, denom);
+  const myP1K   = 1 - Math.pow(1 - 1/denom, rPer1K);
+  const gammaVal = gamma * ballPrice / 1000;
+
+  // ②辞め時: 確変時トータル期待出玉 × 玉単価 × 確変突入率 < 投資した金額
+  // 投資K数で超えた瞬間
+  const evBreakYen = kakuhenTotal * ballPrice * kakuhenRate;
+  let evBreakKgamma = null;
+  for(let k=1; k<=200; k++) {
+    if(evBreakYen < k * 1000) { evBreakKgamma = k; break; }
+  }
+
+  let evRows = [];
+  let cumEVgamma = 0;
+  for(let k=1; k<=100; k++) {
+    const gK    = currG + k * rPer1K;
+    const gPrev = currG + (k-1) * rPer1K;
+    const totalP  = cumProb(gK, denom);
+    const totalPp = cumProb(gPrev, denom);
+    const condP   = (1-prevP)>0 ? (totalP -prevP)/(1-prevP) : 1;
+    const condPp  = (1-prevP)>0 ? (totalPp-prevP)/(1-prevP) : 0;
+    const marginal = condP - condPp;
+    const kEVgamma = gammaVal * marginal - 1;
+    cumEVgamma += kEVgamma;
+    evRows.push({ k, kEVgamma, cumEVgamma, condP });
+  }
+
+  let quitK50 = null;
+  for(let k=1;k<=500;k++) {
+    const g = currG + k * rPer1K;
+    const total = cumProb(g, denom);
+    const cond = (1-prevP)>0 ? (total-prevP)/(1-prevP) : 1;
+    if(cond >= 0.5 && quitK50 === null) { quitK50 = k; }
+  }
+
+  const breakKlabel = evBreakKgamma
+    ? `${evBreakKgamma}K投資時点`
+    : '200K超でも黒字';
+
+  // 50%ラインでのトータル当選確率
+  const totalProb50 = cumProb(currG + quitK50 * rPer1K, denom);
+  
+  // EV辞め時のトータル当選確率
+  const gAtEvBreak = evBreakKgamma ? currG + evBreakKgamma * rPer1K : null;
+  const totalProbAtEvBreak = gAtEvBreak ? cumProb(gAtEvBreak, denom) : null;
+
+  document.getElementById('stats34').innerHTML = `
+    <div class="stat-card"><div class="label">1K当選確率</div><div class="value accent">${(myP1K*100).toFixed(3)}%</div><div class="sub">${rPer1K}回転/1K</div></div>
+    <div class="stat-card ${prevP>=0.5?'red':'blue'}"><div class="label">既経過累積確率</div><div class="value ${prevP>=0.5?'red':'blue'}">${fmt(prevP)}%</div><div class="sub">${prevP>=0.5?'⚠ 50%超過':'正常範囲'}</div></div>
+    <div class="quit-time-card">
+      <div class="qt-grid">
+        <div class="qt-item">
+          <div class="qt-label">50%ラインの値</div>
+          <div class="qt-value">${quitK50}K</div>
+          <div class="qt-sub">${fmtN(Math.round(currG+quitK50*rPer1K))}G地点</div>
+        </div>
+        <div class="qt-item">
+          <div class="qt-label">50%ラインのトータル当選率</div>
+          <div class="qt-value">${(totalProb50*100).toFixed(1)}%</div>
+          <div class="qt-sub">ここまでの合計</div>
+        </div>
+        <div class="qt-item">
+          <div class="qt-label">γ込みEV辞め時</div>
+          <div class="qt-value">${breakKlabel}</div>
+          <div class="qt-sub">トータルEV=${fmtN(Math.round(evBreakYen))}円</div>
+        </div>
+        <div class="qt-item">
+          <div class="qt-label">EV辞め時のトータル当選率</div>
+          <div class="qt-value">${totalProbAtEvBreak ? (totalProbAtEvBreak*100).toFixed(1)+'%' : '−'}</div>
+          <div class="qt-sub">ここまでの合計</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // クイックサマリーはbuildResultSummaryで描画済みのため上書きしない
+
+  // γ内訳
+  const breakdownHtml = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:14px 16px;margin-bottom:16px;font-family:var(--mono);font-size:12px">
+      <div style="color:var(--text3);font-size:10px;letter-spacing:1px;margin-bottom:10px">◈ トータル期待出玉 γ の内訳</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px">
+        <div class="quit-item"><span class="k">初当たり出玉 α</span><span class="v">${fmtN(Math.round(alpha))}個</span></div>
+        <div class="quit-item"><span class="k">確変突入率</span><span class="v">${(kakuhenRate*100).toFixed(0)}%</span></div>
+        <div class="quit-item"><span class="k">確変継続率</span><span class="v">${(kakuhenKeep*100).toFixed(0)}%</span></div>
+        <div class="quit-item"><span class="k">平均連チャン数</span><span class="v">${avgChain.toFixed(2)}回</span></div>
+        <div class="quit-item"><span class="k">確変時期待出玉/回</span><span class="v">${fmtN(Math.round(kakuhenBalls))}個</span></div>
+        <div class="quit-item"><span class="k">確変出玉合計</span><span class="v">${fmtN(Math.round(avgChain*kakuhenBalls))}個</span></div>
+        <div class="quit-item" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px"><span class="k" style="color:var(--accent)">確変時トータル γ</span><span class="v accent">${fmtN(Math.round(kakuhenTotal))}個</span></div>
+        <div class="quit-item" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px"><span class="k" style="color:var(--accent)">γ 円換算（1K）</span><span class="v accent">${gammaVal.toFixed(3)}K</span></div>
+      </div>
+      <div style="margin-top:12px;padding:10px;background:var(--bg2);border-radius:3px;border:1px solid ${evBreakKgamma?'var(--red)':'var(--green)'}">
+        <div style="color:var(--text3);font-size:10px;margin-bottom:6px">◈ γ込みEV辞め時：確変時トータル期待出玉 × 玉単価 × 確変突入率 &lt; 投資した金額</div>
+        <div style="color:${evBreakKgamma?'var(--red)':'var(--green)'};font-size:13px;font-weight:600">
+          ${fmtN(Math.round(kakuhenTotal))}個 × ${ballPrice}円 × ${(kakuhenRate*100).toFixed(0)}% = ${fmtN(Math.round(evBreakYen))}円
+          ${evBreakKgamma ? `→ ✗ ${evBreakKgamma}K（${fmtN(evBreakKgamma*1000)}円）投資時点で辞め` : '→ ✓ 200K投資しても黒字'}
+        </div>
+      </div>
+    </div>`;
+
+  // テーブル
+  const evTableHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="quit-card">
+        <h4>確率50%ライン周辺</h4>
+        ${[-5,-3,-1,0,1,3,5,10,20].map(offset => {
+          const k = (quitK50||1) + offset;
+          if(k<1) return '';
+          const g = currG + k*rPer1K;
+          const total = cumProb(g,denom);
+          const cond = (1-prevP)>0?(total-prevP)/(1-prevP):1;
+          return `<div class="quit-item"><span class="k">${k}K後 (${fmtN(Math.round(g))}G)</span><span class="v ${cond>=0.5?'ok':'ng'}">${(cond*100).toFixed(1)}%</span></div>`;
+        }).join('')}
+      </div>
+      <div class="quit-card">
+        <h4>累積EV（γ込み）推移</h4>
+        <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:8px">K単位の累積損益</div>
+        ${[1,3,5,10,20,30,50,70,100].map(k => {
+          const row = evRows[k-1];
+          if(!row) return '';
+          const gK = currG + k*rPer1K;
+          const evG = row.cumEVgamma.toFixed(2);
+          const color = row.cumEVgamma>=0?'#2ecc71':'#e74c3c';
+          return `<div class="quit-item"><span class="k">+${k}K (${fmtN(Math.round(gK))}G)</span><span style="font-family:var(--mono);font-size:12px;color:${color}">${row.cumEVgamma>=0?'+':''}${evG}K</span></div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  let alertHtml = '';
+  const quitG = fmtN(Math.round(currG + (quitK50||1)*rPer1K));
+  const evMsg = `γ込みEV辞め時: <strong>${breakKlabel}</strong>（トータルEV ${fmtN(Math.round(evBreakYen))}円）<br>確率50%ライン: ${quitK50}K後 (${quitG}G)`;
+  if(prevP>=0.63) {
+    alertHtml=`<div class="alert-box ng">⚠ 確率崩壊ゾーン：累積 ${fmt(prevP)}% 消化済み。<br>${evMsg}</div>`;
+  } else if(prevP>=0.5) {
+    alertHtml=`<div class="alert-box warn">▲ 50%超過：累積 ${fmt(prevP)}% 消化済み。<br>${evMsg}</div>`;
+  } else {
+    alertHtml=`<div class="alert-box ok">✓ 正常範囲：累積 ${fmt(prevP)}% 消化。<br>${evMsg}</div>`;
+  }
+
+  document.getElementById('quit-table').innerHTML = '';
+  document.getElementById('ev-table').innerHTML = '';
+  document.getElementById('quit-alert').innerHTML = breakdownHtml + evTableHtml + alertHtml;
+
+  destroyChart('c3');
+  const kLabels = evRows.map(r=>'+'+r.k+'K');
+  const condArr = evRows.map(r=>parseFloat((r.condP*100).toFixed(2)));
+  const evGArr  = evRows.map(r=>parseFloat(r.cumEVgamma.toFixed(3)));
+
+  charts['c3'] = safeNewChart('chart3', {
+    data:{
+      labels:kLabels,
+      datasets:[
+        { type:'line', label:'条件付き当選確率(%)', data:condArr, borderColor:'#f5a623', backgroundColor:'rgba(245,166,35,0.05)', borderWidth:2, pointRadius:0, fill:true, tension:0.3, yAxisID:'y' },
+        { type:'bar', label:'累積EV γ込み（K）', data:evGArr, backgroundColor:evGArr.map(v=>v>=0?'rgba(46,204,113,0.5)':'rgba(231,76,60,0.5)'), borderColor:evGArr.map(v=>v>=0?'#2ecc71':'#e74c3c'), borderWidth:1, yAxisID:'y2' }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:true,labels:{color:'#8888aa',font:{size:11}}},
+        tooltip:{mode:'index',intersect:false,callbacks:{label:ctx=>{ const v=ctx.parsed.y; if(ctx.dataset.yAxisID==='y') return `確率: ${v.toFixed(2)}%`; return `${ctx.dataset.label}: ${v>=0?'+':''}${v.toFixed(3)}K`; }}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(42,42,58,0.8)'},ticks:{color:'#555570',font:{size:10},maxTicksLimit:20}},
+        y:{position:'left',min:0,max:100,grid:{color:'rgba(42,42,58,0.8)'},ticks:{color:'#8888aa',font:{size:10},callback:v=>v+'%'}},
+        y2:{position:'right',grid:{display:false},ticks:{color:'#8888aa',font:{size:10},callback:v=>v+'K'}}
+      }
+    }
+  });
+}
+
+// ============================================================
+// CHART OPTS
+// ============================================================
+function chartOpts(yLabel, yMax) {
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{display:true,labels:{color:'#8888aa',font:{size:11},boxWidth:12}},
+      tooltip:{mode:'index',intersect:false}
+    },
+    scales:{
+      x:{grid:{color:'rgba(42,42,58,0.8)'},ticks:{color:'#555570',font:{size:10},maxTicksLimit:15}},
+      y:{min:0,max:yMax,grid:{color:'rgba(42,42,58,0.8)'},ticks:{color:'#8888aa',font:{size:10},callback:v=>v+'%'}}
+    }
+  };
+}
+
+// ============================================================
+// INIT — Chart.js のロード完了を待ってから初期計算
+// ============================================================
+refreshSelect();
+
+function waitForChartAndInit() {
+  if (window._chartReady || typeof Chart !== 'undefined') {
+    window._chartReady = true;
+    calculate();
+  } else {
+    setTimeout(waitForChartAndInit, 50);
+  }
+}
+waitForChartAndInit();
+// ============================================================
+// SERVICE WORKER 登録（PWA・オフライン対応）
+// ============================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.log('SW registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
